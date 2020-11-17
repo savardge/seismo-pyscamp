@@ -123,7 +123,7 @@ def fill_time_gaps_noise(stream, min_samples=10, epsilon=1e-20, thresh_disc=100,
     return stream
 
 
-def get_stream(station, channel, starttime, endtime, fs, gain=1e18):
+def get_stream_1day(station, channel, starttime, endtime, fs, gain=1e18):
     print("Getting data stream for station %s, channel %s..." % (station, channel))
 
     day = starttime.strftime("%Y%m%d")
@@ -156,3 +156,64 @@ def get_stream(station, channel, starttime, endtime, fs, gain=1e18):
     print("\tEnd time: %s" % trace.stats.endtime.strftime("%Y-%m-%d %H:%M:%S"))
 
     return trace
+
+
+def get_stream_days(station, channel, first_day, num_days, fs, gain=1e18):
+    print("Getting data stream for station %s, channel %s..." % (station, channel))
+
+    days = [first_day + n*24*3600 for n in range(num_days)]
+
+    for day in days:
+        daystr = day.strftime("%Y%m%d")
+        path_search = os.path.join(WF_DIR, day, "BH.%s..%s*" % (station, channel))
+        file_list = glob(path_search)
+        st = Stream()
+        if len(file_list) > 0:
+            for file in file_list:
+                print("Reading file %s" % file)
+                tmp = read(file)
+                if len(tmp) > 1:
+                    raise ValueError("More than one trace read from file, that's weird...")
+                if tmp[0].stats.sampling_rate != fs:
+                    tmp.resample(fs)
+                st.append(tmp[0])
+        else:
+            print("No data found for day %s" % day)
+            print("\t\tSearch string was: %s" % path_search)
+
+    # Fill gaps with noise
+    st = fill_time_gaps_noise(st)
+
+    # Convert to nm/s
+    trace = st[0]
+    trace.data *= gain
+
+    print("\tFinal Stream:")
+    print("\tSampling rate: %f" % fs)
+    print("\tStart time: %s" % trace.stats.starttime.strftime("%Y-%m-%d %H:%M:%S"))
+    print("\tEnd time: %s" % trace.stats.endtime.strftime("%Y-%m-%d %H:%M:%S"))
+
+    return trace
+
+
+def get_filename_root(stats, sublen_samp, out_dir):
+    # times
+    trace_start = stats.starttime
+    trace_end = stats.endtime
+    trace_start.precision = 3
+    trace_end.precision = 3
+
+    station = stats.station
+    channel = stats.channel
+    fs = stats.sampling_rate
+
+    filename_root = "%s_%s_%s_%s_%dHz_win%dsamp" % (
+        trace_start.strftime("%Y%m%d%H%M%S.%f"),
+        trace_end.strftime("%Y%m%d%H%M%S.%f"),
+        station,
+        channel,
+        int(round(fs, 0)),
+        sublen_samp)
+    filepath = os.path.join(out_dir, filename_root)
+
+    return filepath
