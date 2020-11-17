@@ -9,7 +9,7 @@
 #SBATCH --array=137-230
 #SBATCH --output="outslurm/slurm-%A_%a.out"
 
-day1=`sed -n "${SLURM_ARRAY_TASK_ID}p" dates_X7-13.list`
+day1=`sed -n "${SLURM_ARRAY_TASK_ID}p" dates_left.list`
 station="G12" 
 
 echo "station $station, start date is $day1"

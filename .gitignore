@@ -7,3 +7,5 @@ data_borehole/matrix_profiles
 .DS_Store
 *.pyc
 __pycache__
+outslurm/
+slurm-*

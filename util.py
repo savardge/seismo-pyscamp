@@ -40,9 +40,9 @@ def detect_time_gaps(trace, min_samples=10, epsilon=1e-20, thresh_disc=100):
         ind_disc = np.where(ind_diff > thresh_disc)[0]
 
         # N-1 time gaps
-        # print(ind_gap)
+        # Logger.info(ind_gap)
         curr_ind_start = ind_gap[0]
-        # print(curr_ind_start)
+        # Logger.info(curr_ind_start)
         for igap in range(len(ind_disc)):  # do not enter this loop if ind_disc is empty
             gap_start_ind.append(curr_ind_start)
             last_index = ind_gap[ind_disc[igap]] + min_samples
@@ -124,7 +124,7 @@ def fill_time_gaps_noise(stream, min_samples=10, epsilon=1e-20, thresh_disc=100,
 
 
 def get_stream_1day(station, channel, starttime, endtime, fs, gain=1e18):
-    print("Getting data stream for station %s, channel %s..." % (station, channel))
+    Logger.info("Getting data stream for station %s, channel %s..." % (station, channel))
 
     day = starttime.strftime("%Y%m%d")
     path_search = os.path.join(WF_DIR, day, "BH.%s..%s*" % (station, channel))
@@ -132,7 +132,7 @@ def get_stream_1day(station, channel, starttime, endtime, fs, gain=1e18):
     st = Stream()
     if len(file_list) > 0:
         for file in file_list:
-            print("Reading file %s" % file)
+            Logger.info("Reading file %s" % file)
             tmp = read(file, starttime=starttime, endtime=endtime)
             if len(tmp) > 1:
                 raise ValueError("More than one trace read from file, that's weird...")
@@ -140,8 +140,8 @@ def get_stream_1day(station, channel, starttime, endtime, fs, gain=1e18):
                 tmp.resample(fs)
             st.append(tmp[0])
     else:
-        print("No data found for day %s" % day)
-        print("\t\tSearch string was: %s" % path_search)
+        Logger.info("No data found for day %s" % day)
+        Logger.info("\t\tSearch string was: %s" % path_search)
 
     # Fill gaps with noise
     st = fill_time_gaps_noise(st)
@@ -150,27 +150,29 @@ def get_stream_1day(station, channel, starttime, endtime, fs, gain=1e18):
     trace = st[0]
     trace.data *= gain
 
-    print("\tFinal Stream:")
-    print("\tSampling rate: %f" % fs)
-    print("\tStart time: %s" % trace.stats.starttime.strftime("%Y-%m-%d %H:%M:%S"))
-    print("\tEnd time: %s" % trace.stats.endtime.strftime("%Y-%m-%d %H:%M:%S"))
+    Logger.info("\tFinal Stream:")
+    Logger.info("\tSampling rate: %f" % fs)
+    Logger.info("\tStart time: %s" % trace.stats.starttime.strftime("%Y-%m-%d %H:%M:%S"))
+    Logger.info("\tEnd time: %s" % trace.stats.endtime.strftime("%Y-%m-%d %H:%M:%S"))
 
     return trace
 
 
 def get_stream_days(station, channel, first_day, num_days, fs, gain=1e18):
-    print("Getting data stream for station %s, channel %s..." % (station, channel))
+    Logger.info("Getting data stream for station %s, channel %s..." % (station, channel))
 
     days = [first_day + n*24*3600 for n in range(num_days)]
-
+    
+    st = Stream()
     for day in days:
         daystr = day.strftime("%Y%m%d")
-        path_search = os.path.join(WF_DIR, day, "BH.%s..%s*" % (station, channel))
+        Logger.info("Looking for data for day %s" % daystr)
+        path_search = os.path.join(WF_DIR, daystr, "BH.%s..%s*" % (station, channel))
         file_list = glob(path_search)
-        st = Stream()
+        
         if len(file_list) > 0:
             for file in file_list:
-                print("Reading file %s" % file)
+                Logger.info("Reading file %s" % file)
                 tmp = read(file)
                 if len(tmp) > 1:
                     raise ValueError("More than one trace read from file, that's weird...")
@@ -178,9 +180,14 @@ def get_stream_days(station, channel, first_day, num_days, fs, gain=1e18):
                     tmp.resample(fs)
                 st.append(tmp[0])
         else:
-            print("No data found for day %s" % day)
-            print("\t\tSearch string was: %s" % path_search)
-
+            Logger.info("No data found for day %s" % day)
+            Logger.info("\t\tSearch string was: %s" % path_search)
+    
+    # Merge
+    Logger.info("Merging stream")
+    st.merge(method=1, fill_value=0)
+    Logger.info(st)
+    
     # Fill gaps with noise
     st = fill_time_gaps_noise(st)
 
@@ -188,10 +195,13 @@ def get_stream_days(station, channel, first_day, num_days, fs, gain=1e18):
     trace = st[0]
     trace.data *= gain
 
-    print("\tFinal Stream:")
-    print("\tSampling rate: %f" % fs)
-    print("\tStart time: %s" % trace.stats.starttime.strftime("%Y-%m-%d %H:%M:%S"))
-    print("\tEnd time: %s" % trace.stats.endtime.strftime("%Y-%m-%d %H:%M:%S"))
+    Logger.info("Final trace: ")
+    Logger.info(trace)
+    
+    Logger.info("\tFinal Stream:")
+    Logger.info("\tSampling rate: %f" % fs)
+    Logger.info("\tStart time: %s" % trace.stats.starttime.strftime("%Y-%m-%d %H:%M:%S"))
+    Logger.info("\tEnd time: %s" % trace.stats.endtime.strftime("%Y-%m-%d %H:%M:%S"))
 
     return trace
 

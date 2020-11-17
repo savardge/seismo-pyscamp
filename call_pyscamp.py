@@ -7,6 +7,9 @@ from MPLib import *
 from GraphLib import *
 
 import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
 Logger = logging.getLogger(__name__)
 
 
@@ -24,12 +27,14 @@ if __name__ == "__main__":
     station = sys.argv[1]
     day_str = sys.argv[2]
     starttime = UTCDateTime(day_str)
-    num_days = int(day_str[3])
-    out_dir = "/home/genevieve.savard/seismo-pyscamp/borehole_data/matrix_profiles"
+    num_days = int(sys.argv[3])
+    sublen_sec = float(sys.argv[4])
+    Logger.info("Input parameters are:\n\tstation = %s\n\tday_str = %s\n\tnum_days = %d\n\tsublen_sec = %4.2f" % (station, day_str, num_days, sublen_sec))
+    out_dir = "/home/genevieve.savard/seismo-pyscamp/data_borehole/matrix_profiles"
     wf_dir = "/home/gilbert_lab/cami_frs/borehole_data/sac_daily_nez_500Hz/"
 
     # Define SCAMP sliding window length
-    sublen_sec = 0.5
+    #sublen_sec = 0.5
     fs = 250.0
     sublen_samp = int(sublen_sec * fs)
 
@@ -40,11 +45,11 @@ if __name__ == "__main__":
             endtime = starttime + 86400
             trace1 = get_stream_1day(station=station, channel=channel, starttime=starttime, endtime=endtime, fs=fs)
         else:
-            trace1 = get_stream_1day(station=station, channel=channel, starttime=starttime, num_days=num_days, fs=fs)
+            trace1 = get_stream_days(station=station, channel=channel, first_day=starttime, num_days=num_days, fs=fs)
 
-        filename_root = get_filename_root(stats=trace1.stats, sublen_samp=sublen_samp)
+        filename_root = get_filename_root(stats=trace1.stats, sublen_samp=sublen_samp, out_dir=out_dir)
 
-        if not os.path.exists(filename_root + ".pickle"):  # Check file doesn't exist yet
+        if not os.path.exists(filename_root + "_mp.npy"):  # Check file doesn't exist yet
 
             # Run SCAMP
             Logger.info("Running SCAMP...")
@@ -59,8 +64,8 @@ if __name__ == "__main__":
             mpObj.save(filename=filename_root + ".pickle")
 
             # To Save Matrix Profile as numpy array binaries:
-            # np.save(filename_root + ".ind", mpind1)
-            # del mpind1
-            # np.save(filename_root + ".mp", mp1)
-            # del mp1
+            np.save(filename_root + "_ind.npy", mpind1)
+            del mpind1
+            np.save(filename_root + "_mp.npy", mp1)
+            del mp1
 
