@@ -8,7 +8,6 @@ from GraphLib import *
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
-
 import logging
 Logger = logging.getLogger(__name__)
 
@@ -124,6 +123,7 @@ class MatrixProfile:
             self.channel = trace.stats.channel
             self.fs = trace.stats.sampling_rate
             self.starttime = trace.stats.starttime
+            self.mp_starttime = self.starttime + self.sublen/self.fs
             self.endtime = trace.stats.endtime
 
         else:
@@ -161,16 +161,14 @@ class MatrixProfile:
         if not width:
             width = int(0.5 * self.sublen)
         lowthresh = np.median(self.mp) + mad_thresh_mult * robust.mad(self.mp)
-        peaks, properties = find_peaks(self.mp, height=lowthresh, width=width)  # , prominence=0.3)
-
-
+        peaks, properties = find_peaks(self.mp, height=[lowthresh, 1.0], width=width)  # , prominence=0.3)
 
         # Remove detections where CC > 1
         nbefore = len(peaks)
         mask = properties["peak_heights"] < 1.0
         peaks = peaks[mask]
         for k, v in properties.items():
-            print(k)
+            #print(k)
             properties[k] = properties[k][mask]
         nafter = len(peaks)
         Logger.info("Remove %d peak detections where CC > 1" % (nafter - nbefore))
@@ -252,6 +250,7 @@ class MatrixProfile:
         pairs = pd.DataFrame({"Index1": self._peak_idx1,
                               "Index2": self._peak_idx2,
                               "peak_cc": self._peak_properties["peak_heights"],
+                              "peak_mad_mult": self._peak_properties["peak_heights"]/robust.mad(self.mp),
                               "peak_width": self._peak_properties["widths"],
                               "peak_prominence": self._peak_properties["prominences"]})
 
@@ -288,6 +287,7 @@ class MatrixProfile:
         dfref["group_idx"] = dfref.apply(find_group, axis=1, args=("window_id", self.groups))
 
         self.pairs = df
+        self.ref_windows = dfref
 
         return self.groups, self.pairs, self.ref_windows
 
