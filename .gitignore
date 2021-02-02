@@ -1,5 +1,9 @@
+*/.ipynb_checkpoints
 .idea
-data_borehole/matrix_profiles
+scripts_frs/matrix_profiles
+scripts_frs/outslurm
+scripts_frs/detections
+slurm-*
 *.npy
 *.mseed
 *.sac
@@ -7,5 +11,3 @@ data_borehole/matrix_profiles
 .DS_Store
 *.pyc
 __pycache__
-outslurm/
-slurm-*
