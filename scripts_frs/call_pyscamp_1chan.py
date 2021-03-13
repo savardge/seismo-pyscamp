@@ -4,7 +4,7 @@ import sys
 import time
 from seiscamp.util import *
 from seiscamp.MPLib import *
-from seiscamp.GraphLib import *
+#from seiscamp.GraphLib import *
 
 import logging
 logging.basicConfig(
@@ -31,12 +31,11 @@ if __name__ == "__main__":
     num_days = int(sys.argv[3])
     sublen_sec = float(sys.argv[4])
     chan = sys.argv[5]
-    Logger.info("Input parameters are:\n\tstation = %s\n\tchannel = %s\n\tday_str = %s\n\tnum_days = %d\n\tsublen_sec = %4.2f" % (station, chan, day_str, num_days, sublen_sec))
-    out_dir = "/home/genevieve.savard/seismo-pyscamp/data_borehole/matrix_profiles"
+    fs = float(sys.argv[6])
+    Logger.info("Input parameters are:\n\tstation = %s\n\tchannel = %s\n\tday_str = %s\n\tnum_days = %d\n\tsublen_sec = %4.2f\n\tSampling rate: %.0f" % (station, chan, day_str, num_days, sublen_sec, fs))
+    out_dir = "/home/genevieve.savard/seismo-pyscamp/scripts_frs/matrix_profiles"
 
     # Define SCAMP sliding window length
-    #sublen_sec = 0.5
-    fs = 250.0
     sublen_samp = int(sublen_sec * fs)
 
     for channel in [chan]:
@@ -44,7 +43,7 @@ if __name__ == "__main__":
         Logger.info("Fetching data...")
         if num_days == 1:
             endtime = starttime + 86400
-            trace1 = get_stream_1day(station=station, channel=channel, starttime=starttime, endtime=endtime, fs=fs, gain=1e22)
+            trace1 = get_stream_1day(station=station, channel=channel, starttime=starttime, endtime=endtime, fs=fs)
         else:
             trace1 = get_stream_days(station=station, channel=channel, first_day=starttime, num_days=num_days, fs=fs)
 

@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import os
 import pickle
-from GraphLib import *
+from seiscamp.GraphLib import *
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
@@ -177,7 +177,7 @@ class MatrixProfile:
         self._peak_idx1 = peaks.astype(int)
         self._peak_idx2 = np.take(self.ind, self._peak_idx1).astype(int)
         self.num_peaks = len(peaks)
-
+        
         Logger.info("# peaks found: %d" % self.num_peaks)
 
     def _idx_to_windows(self, tol=None):

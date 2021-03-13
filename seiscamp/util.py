@@ -8,7 +8,8 @@ import logging
 
 Logger = logging.getLogger(__name__)
 
-WF_DIR = "/home/gilbert_lab/cami_frs/borehole_data/sac_daily_nez_500Hz/"
+#WF_DIR = "/home/gilbert_lab/cami_frs/borehole_data/sac_daily_nez_500Hz/"
+WF_DIR = "/home/gilbert_lab/cami_frs/all_daily_symlinks/"
 
 
 def detect_time_gaps(trace, min_samples=10, epsilon=1e-20, thresh_disc=100):
@@ -126,8 +127,12 @@ def fill_time_gaps_noise(stream, min_samples=10, epsilon=1e-20, thresh_disc=100,
 def get_stream_1day(station, channel, starttime, endtime, fs, gain=1e18):
     Logger.info("Getting data stream for station %s, channel %s..." % (station, channel))
 
-    day = starttime.strftime("%Y%m%d")
-    path_search = os.path.join(WF_DIR, day, "8O.%s..%s*" % (station, channel))
+    #day = starttime.strftime("%Y%m%d")
+    #path_search = os.path.join(WF_DIR, day, "*.%s*%s*" % (station, channel))
+    day = starttime.strftime("%j")
+    year = starttime.strftime("%Y")
+    path_search = os.path.join(WF_DIR, year, day, "*.%s..%s*" % (station, channel))
+    
     file_list = glob(path_search)
     st = Stream()
     if len(file_list) > 0:
@@ -165,15 +170,20 @@ def get_stream_days(station, channel, first_day, num_days, fs, gain=1e18):
     
     st = Stream()
     for day in days:
-        daystr = day.strftime("%Y%m%d")
+        #daystr = day.strftime("%Y%m%d")
+        #path_search = os.path.join(WF_DIR, daystr, "*.%s*%s*" % (station, channel))
+        daystr = day.strftime("%j")
+        year = day.strftime("%Y")
+        path_search = os.path.join(WF_DIR, year, daystr, "*.%s..%s*" % (station, channel))
+
         Logger.info("Looking for data for day %s" % daystr)
-        path_search = os.path.join(WF_DIR, daystr, "8O.%s..%s*" % (station, channel))
         file_list = glob(path_search)
         
         if len(file_list) > 0:
             for file in file_list:
                 Logger.info("Reading file %s" % file)
                 tmp = read(file)
+                tmp.merge(method=1)
                 if len(tmp) > 1:
                     raise ValueError("More than one trace read from file, that's weird...")
                 if tmp[0].stats.sampling_rate != fs:
@@ -195,6 +205,9 @@ def get_stream_days(station, channel, first_day, num_days, fs, gain=1e18):
     trace = st[0]
     trace.data *= gain
 
+    # High-pass at 2 Hz
+    trace.filter("highpass", freq=2)
+    
     Logger.info("Final trace: ")
     Logger.info(trace)
     
