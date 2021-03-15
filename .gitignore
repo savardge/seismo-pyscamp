@@ -1,4 +1,5 @@
 */.ipynb_checkpoints
+notebooks
 .idea
 scripts_frs/matrix_profiles
 scripts_frs/outslurm
