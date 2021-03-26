@@ -3,6 +3,7 @@ setup.py
 seiscamp/GraphLib.py
 seiscamp/MPLib.py
 seiscamp/__init__.py
+seiscamp/data.py
 seiscamp/util.py
 seismo_pyscamp.egg-info/PKG-INFO
 seismo_pyscamp.egg-info/SOURCES.txt

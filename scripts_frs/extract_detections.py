@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 from obspy import UTCDateTime
 import time
-from util import *
-from MPLib import *
+from seiscamp.util import *
+from seiscamp.MPLib import *
 import sys
 
 logging.basicConfig(
@@ -15,7 +15,7 @@ doplot = False
 mad_thresh_mult = 6
 fname_mp = sys.argv[1]
 #fname_mp = "data_borehole/matrix_profiles/20200310000000.000000_20200310235959.996000_G12_DPZ_250Hz_win125samp_mp.npy"
-detect_dir = "/home/genevieve.savard/seismo-pyscamp/data_borehole/detections"
+detect_dir = "/home/genevieve.savard/seismo-pyscamp/scripts_frs/detections"
 
 fname_ind = fname_mp.replace("_mp.npy", "_ind.npy")
 Logger.info("MP file: %s" % fname_mp)
@@ -52,7 +52,7 @@ proce = time.time()
 Logger.info("Time for find_peaks: %f s." % (proce - procs))
 
 # Find connected groups
-cc, pairs, ref_windows = mpObj.group_ids()
+_, pairs, ref_windows = mpObj.group_ids()
 
 # Save detections
 fname_root = os.path.split(fname_mp)[1].split("_mp.npy")[0]

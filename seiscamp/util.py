@@ -1,16 +1,28 @@
 import numpy as np
 from statsmodels import robust
-from obspy import read, Stream
-from glob import glob
-import os
-
 import logging
 
 Logger = logging.getLogger(__name__)
 
-#WF_DIR = "/home/gilbert_lab/cami_frs/borehole_data/sac_daily_nez_500Hz/"
-WF_DIR = "/home/gilbert_lab/cami_frs/all_daily_symlinks/"
 
+def RunningStd(x,N):
+    idx = np.arange(N) + np.arange(len(x)-N+1)[:,None]
+    #b = [row[row>0] for row in x[idx]] # to exclude 0's
+    #return np.array(map(np.std,b)) # to exclude 0's
+    #return np.std(x[idx],axis=1) # no padding
+    return np.pad(np.std(x[idx],axis=1), pad_width=(0, N-1), mode="edge")
+    #return np.array([np.median(c) for c in b])  # This also works
+
+    
+def RunningMedian(x,N):
+    idx = np.arange(N) + np.arange(len(x)-N+1)[:,None]
+    return np.pad(np.median(x[idx],axis=1), pad_width=(0, N-1), mode="edge")
+
+
+def RunningMean(x,N):
+    idx = np.arange(N) + np.arange(len(x)-N+1)[:,None]
+    return np.pad(np.mean(x[idx],axis=1), pad_width=(0, N-1), mode="edge")
+    
 
 def detect_time_gaps(trace, min_samples=10, epsilon=1e-20, thresh_disc=100):
     """
@@ -124,119 +136,175 @@ def fill_time_gaps_noise(stream, min_samples=10, epsilon=1e-20, thresh_disc=100,
     return stream
 
 
-def get_stream_1day(station, channel, starttime, endtime, fs, gain=1e18):
-    Logger.info("Getting data stream for station %s, channel %s..." % (station, channel))
+def mccc(seis, dt, twin, ccmin, comp='Z'):
+    from scipy.linalg import lstsq
+    """ FUNCTION [TDEL,RMEAN,SIGR] = MCCC(SEIS,DT,TWIN);
+    Function MCCC determines optimum relative delay times for a set of seismograms based on the
+    VanDecar & Crosson multi-channel cross-correlation algorithm. SEIS is the set of seismograms.
+    It is assumed that this set includes the window of interest and nothing more since we calculate the
+    correlation functions in the Fourier domain. DT is the sample interval and TWIN is the window about
+    zero in which the maximum search is performed (if TWIN is not specified, the search is performed over
+    the entire correlation interval).
+    APP added the ccmin, such that only signals that meet some threshold similarity contribute to the delay times. """
 
-    #day = starttime.strftime("%Y%m%d")
-    #path_search = os.path.join(WF_DIR, day, "*.%s*%s*" % (station, channel))
-    day = starttime.strftime("%j")
-    year = starttime.strftime("%Y")
-    path_search = os.path.join(WF_DIR, year, day, "*.%s..%s*" % (station, channel))
-    
-    file_list = glob(path_search)
-    st = Stream()
-    if len(file_list) > 0:
-        for file in file_list:
-            Logger.info("Reading file %s" % file)
-            tmp = read(file, starttime=starttime, endtime=endtime)
-            if len(tmp) > 1:
-                raise ValueError("More than one trace read from file, that's weird...")
-            if tmp[0].stats.sampling_rate != fs:
-                tmp.resample(fs)
-            st.append(tmp[0])
-    else:
-        Logger.info("No data found for day %s" % day)
-        Logger.info("\t\tSearch string was: %s" % path_search)
+    # Set nt to twice length of seismogram section to avoid
+    # spectral contamination/overlap. Note we assume that
+    # columns enumerate time samples, and rows enumerate stations.
+    # Note in typical application ns is not number of stations...its really number of events
+    # all data is from one station
+    nt = np.shape(seis)[1] * 2
+    ns = np.shape(seis)[0]
+    tcc = np.zeros([ns, ns])
 
-    # Fill gaps with noise
-    st = fill_time_gaps_noise(st)
+    # Copy seis for normalization correction
+    seis2 = np.copy(seis)
 
-    # Convert to nm/s
-    trace = st[0]
-    trace.data *= gain
+    # Set width of window around 0 time to search for maximum
+    # mask = np.ones([1,nt])
+    # if nargin == 3:
+    itw = int(np.fix(twin / (2 * dt)))
+    mask = np.zeros([1, nt])[0]
+    mask[0:itw + 1] = 1.0
+    mask[nt - itw:nt] = 1.0
 
-    Logger.info("\tFinal Stream:")
-    Logger.info("\tSampling rate: %f" % fs)
-    Logger.info("\tStart time: %s" % trace.stats.starttime.strftime("%Y-%m-%d %H:%M:%S"))
-    Logger.info("\tEnd time: %s" % trace.stats.endtime.strftime("%Y-%m-%d %H:%M:%S"))
+    # Zero array for sigt and list on non-zero channels
+    sigt = np.zeros(ns)
 
-    return trace
+    # First remove means, compute autocorrelations, and find non-zeroed stations.
+    for iss in range(0, ns):
+        seis[iss, :] = seis[iss, :] - np.mean(seis[iss, :])
+        ffiss = np.fft.fft(seis[iss, :], nt)
+        acf = np.real(np.fft.ifft(ffiss * np.conj(ffiss), nt))
+        sigt[iss] = np.sqrt(max(acf))
 
+    # Determine relative delay times between all pairs of traces.
+    r = np.zeros([ns, ns])
+    tcc = np.zeros([ns, ns])
 
-def get_stream_days(station, channel, first_day, num_days, fs, gain=1e18):
-    Logger.info("Getting data stream for station %s, channel %s..." % (station, channel))
+    # Two-Channel normalization ---------------------------------------------------------
 
-    days = [first_day + n*24*3600 for n in range(num_days)]
-    
-    st = Stream()
-    for day in days:
-        #daystr = day.strftime("%Y%m%d")
-        #path_search = os.path.join(WF_DIR, daystr, "*.%s*%s*" % (station, channel))
-        daystr = day.strftime("%j")
-        year = day.strftime("%Y")
-        path_search = os.path.join(WF_DIR, year, daystr, "*.%s..%s*" % (station, channel))
+    # This loop gets a correct r by checking how many channels are actually being compared
+    if comp == 'NE':
 
-        Logger.info("Looking for data for day %s" % daystr)
-        file_list = glob(path_search)
-        
-        if len(file_list) > 0:
-            for file in file_list:
-                Logger.info("Reading file %s" % file)
-                tmp = read(file)
-                tmp.merge(method=1)
-                if len(tmp) > 1:
-                    raise ValueError("More than one trace read from file, that's weird...")
-                if tmp[0].stats.sampling_rate != fs:
-                    tmp.resample(fs)
-                st.append(tmp[0])
-        else:
-            Logger.info("No data found for day %s" % day)
-            Logger.info("\t\tSearch string was: %s" % path_search)
-    
-    # Merge
-    Logger.info("Merging stream")
-    st.merge(method=1, fill_value=0)
-    Logger.info(st)
-    
-    # Fill gaps with noise
-    st = fill_time_gaps_noise(st)
+        # First find the zero-channels (the np.any tool will fill in zeroNE)
+        # zeroNE ends up with [1,0], [0,1], or [1,1] for each channel, 1 meaning there IS data
+        zeroNE = np.zeros([ns, 2])
+        dum = np.any(seis2[:, 0:nt / 4], 1, zeroNE[:, 0])
+        dum = np.any(seis2[:, nt / 4:nt / 2], 1, zeroNE[:, 1])
 
-    # Convert to nm/s
-    trace = st[0]
-    trace.data *= gain
+        # Now start main (outer) loop
+        for iss in range(0, ns - 1):
+            ffiss = np.conj(np.fft.fft(seis[iss, :], nt))
 
-    # High-pass at 2 Hz
-    trace.filter("highpass", freq=2)
-    
-    Logger.info("Final trace: ")
-    Logger.info(trace)
-    
-    Logger.info("\tFinal Stream:")
-    Logger.info("\tSampling rate: %f" % fs)
-    Logger.info("\tStart time: %s" % trace.stats.starttime.strftime("%Y-%m-%d %H:%M:%S"))
-    Logger.info("\tEnd time: %s" % trace.stats.endtime.strftime("%Y-%m-%d %H:%M:%S"))
+            for jss in range(iss + 1, ns):
 
-    return trace
+                ffjss = np.fft.fft(seis[jss, :], nt)
+                # ccf  = np.real(np.fft.ifft(ffiss*ffjss,nt))*mask
+                ccf = np.fft.fftshift(np.real(np.fft.ifft(ffiss * ffjss, nt)) * mask)
+                cmax = np.max(ccf)
 
+                # chcor for channel correction sqrt[ abs( diff[jss] - diff[iss]) + 1]
+                # This would be perfect correction if N,E channels always had equal power, but for now is approximate
+                chcor = np.sqrt(abs(zeroNE[iss, 0] - zeroNE[jss, 0] - zeroNE[iss, 1] + zeroNE[jss, 1]) + 1)
 
-def get_filename_root(stats, sublen_samp, out_dir):
-    # times
-    trace_start = stats.starttime
-    trace_end = stats.endtime
-    trace_start.precision = 3
-    trace_end.precision = 3
+                # OLD, INCORRECT chcor
+                # chcor = np.sqrt( np.sum(zeroNE[iss,:])+np.sum(zeroNE[jss,:]) - (zeroNE[iss,0]*zeroNE[jss,0]+zeroNE[iss,1]*zeroNE[jss,1]) )
 
-    station = stats.station
-    channel = stats.channel
-    fs = stats.sampling_rate
+                rtemp = cmax * chcor / (sigt[iss] * sigt[jss])
 
-    filename_root = "%s_%s_%s_%s_%dHz_win%dsamp" % (
-        trace_start.strftime("%Y%m%d%H%M%S.%f"),
-        trace_end.strftime("%Y%m%d%H%M%S.%f"),
-        station,
-        channel,
-        int(round(fs, 0)),
-        sublen_samp)
-    filepath = os.path.join(out_dir, filename_root)
+                # Quadratic interpolation for optimal time (only if CC found > ccmin)
+                if rtemp > ccmin:
 
-    return filepath
+                    ttemp = np.argmax(ccf)
+
+                    x = np.array(ccf[ttemp - 1:ttemp + 2])
+                    A = np.array([[1, -1, 1], [0, 0, 1], [1, 1, 1]])
+
+                    [a, b, c] = lstsq(A, x)[0]
+
+                    # Solve dy/dx = 2ax + b = 0 for time (x)
+                    tcc[iss, jss] = -b / (2 * a) + ttemp
+
+                    # Estimate cross-correlation coefficient
+                    # r[iss,jss] = cmax/(sigt[iss]*sigt[jss])
+                    r[iss, jss] = rtemp
+                else:
+                    tcc[iss, jss] = nt / 2
+
+                    # Reguar Normalization Version -------------------------------------------------------
+    elif comp != 'NE':
+        for iss in range(0, ns - 1):
+            ffiss = np.conj(np.fft.fft(seis[iss, :], nt))
+            for jss in range(iss + 1, ns):
+
+                ffjss = np.fft.fft(seis[jss, :], nt)
+                # ccf  = np.real(np.fft.ifft(ffiss*ffjss,nt))*mask
+                ccf = np.fft.fftshift(np.real(np.fft.ifft(ffiss * ffjss, nt)) * mask)
+                cmax = np.max(ccf)
+
+                rtemp = cmax / (sigt[iss] * sigt[jss])
+
+                # Quadratic interpolation for optimal time (only if CC found > ccmin)
+                if rtemp > ccmin:
+
+                    ttemp = np.argmax(ccf)
+
+                    x = np.array(ccf[ttemp - 1:ttemp + 2])
+                    A = np.array([[1, -1, 1], [0, 0, 1], [1, 1, 1]])
+
+                    [a, b, c] = lstsq(A, x)[0]
+
+                    # Solve dy/dx = 2ax + b = 0 for time (x)
+                    tcc[iss, jss] = -b / (2 * a) + ttemp
+
+                    # Estimate cross-correlation coefficient
+                    # r[iss,jss] = cmax/(sigt[iss]*sigt[jss])
+                    r[iss, jss] = rtemp
+                else:
+                    tcc[iss, jss] = nt / 2
+
+                    #######################################################
+
+    # Some r could have been made > 1 due to approximation, fix this
+    r[r >= 1] = 0.99
+
+    # Fisher's transform of cross-correlation coefficients to produce
+    # normally distributed quantity on which Gaussian statistics
+    # may be computed and then inverse transformed
+    z = 0.5 * np.log((1 + r) / (1 - r))
+    zmean = np.zeros(ns)
+    for iss in range(0, ns):
+        zmean[iss] = (np.sum(z[iss, :]) + np.sum(z[:, iss])) / (ns - 1)
+    rmean = (np.exp(2 * zmean) - 1) / (np.exp(2 * zmean) + 1)
+
+    # Correct negative delays (for fftshifted times)
+    # ix = np.where( tcc>nt/2);  tcc[ix] = tcc[ix]-nt
+    tcc = tcc - nt / 2
+
+    # Subtract 1 to account for sample 1 at 0 lag (Not in python)
+    # tcc = tcc-1
+
+    # Multiply by sample rate
+    tcc = tcc * dt
+
+    # Use sum rule to assemble optimal delay times with zero mean
+    tdel = np.zeros(ns)
+
+    # I changed the tdel calculation to not include zeroed-out waveform pairs in normalization
+    for iss in range(0, ns):
+        ttemp = np.append(tcc[iss, iss + 1:ns], -tcc[0:iss, iss])
+        tdel[iss] = np.sum(ttemp) / (np.count_nonzero(ttemp) + 1)
+        # tdel[iss] = ( np.sum(tcc[iss,iss+1:ns])-np.sum(tcc[0:iss,iss]) )/ns
+
+    # Compute associated residuals
+    res = np.zeros([ns, ns])
+    sigr = np.zeros(ns)
+    for iss in range(0, ns - 1):
+        for jss in range(iss + 1, ns):
+            res[iss, jss] = tcc[iss, jss] - (tdel[iss] - tdel[jss])
+
+    for iss in range(0, ns):
+        sigr[iss] = np.sqrt((np.sum(res[iss, iss + 1:ns] ** 2) + np.sum(res[0:iss, iss] ** 2)) / (ns - 2))
+
+    return tdel, rmean, sigr, r, tcc
+

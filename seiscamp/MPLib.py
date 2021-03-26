@@ -225,7 +225,7 @@ class MatrixProfile:
 
         self.groups = cc
 
-    def group_ids(self, tol=None):
+    def group_ids(self, tol=None, connect=False):
         """
         Associate windows to each index for each pair
         return: Pandas DataFrame
@@ -249,6 +249,8 @@ class MatrixProfile:
 
         pairs = pd.DataFrame({"Index1": self._peak_idx1,
                               "Index2": self._peak_idx2,
+                              "t1": np.array([self.mp_starttime + _t for _t in self._peak_idx1.astype(float)/self.fs]),
+                              "t2": np.array([self.mp_starttime + _t for _t in self._peak_idx2.astype(float)/self.fs]),
                               "peak_cc": self._peak_properties["peak_heights"],
                               "peak_mad_mult": self._peak_properties["peak_heights"]/robust.mad(self.mp),
                               "peak_width": self._peak_properties["widths"],
@@ -279,13 +281,22 @@ class MatrixProfile:
         df["win_id_1"] = df["win_id_1"].astype(int)
         df["win_id_2"] = df["win_id_2"].astype(int)
 
-        # Get connected components
-        self._get_connected_components(df, ref=dfref, colid1="win_id_1", colid2="win_id_2")
+        if connect:
+            # Get connected components
+            self._get_connected_components(df, ref=dfref, colid1="win_id_1", colid2="win_id_2")
 
-        # Add column with group index to dataframe
-        df["group_idx"] = df.apply(find_group, axis=1, args=("win_id_1", self.groups))
-        dfref["group_idx"] = dfref.apply(find_group, axis=1, args=("window_id", self.groups))
-
+            # Add column with group index to dataframe
+            df["group_idx"] = df.apply(find_group, axis=1, args=("win_id_1", self.groups))
+            dfref["group_idx"] = dfref.apply(find_group, axis=1, args=("window_id", self.groups))
+        else:
+            self.groups = None
+            
+        # Add time to ref windows
+        dfref["lb_time"] = np.array([self.mp_starttime + _t for _t in lb.astype(float)/self.fs])
+        dfref["ub_time"] = np.array([self.mp_starttime + _t for _t in ub.astype(float)/self.fs])
+        dfref["window_duration"] = dfref["ub_time"] - dfref["lb_time"]        
+        
+        # Finally, Attach to MP object
         self.pairs = df
         self.ref_windows = dfref
 

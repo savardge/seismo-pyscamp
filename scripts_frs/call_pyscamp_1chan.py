@@ -27,7 +27,7 @@ if __name__ == "__main__":
     # User inputs
     station = sys.argv[1]
     day_str = sys.argv[2]
-    starttime = UTCDateTime(day_str)
+    starttime = UTCDateTime.strptime(day_str, "%Y%m%d")
     num_days = int(sys.argv[3])
     sublen_sec = float(sys.argv[4])
     chan = sys.argv[5]
