@@ -1,6 +1,8 @@
 */.ipynb_checkpoints
 notebooks
 .idea
+scripts_meager
+scripts_frs
 scripts_frs/matrix_profiles
 scripts_frs/outslurm
 scripts_frs/detections
