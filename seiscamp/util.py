@@ -7,21 +7,20 @@ Logger = logging.getLogger(__name__)
 
 def RunningStd(x,N):
     idx = np.arange(N) + np.arange(len(x)-N+1)[:,None]
-    #b = [row[row>0] for row in x[idx]] # to exclude 0's
-    #return np.array(map(np.std,b)) # to exclude 0's
-    #return np.std(x[idx],axis=1) # no padding
-    return np.pad(np.std(x[idx],axis=1), pad_width=(0, N-1), mode="edge")
-    #return np.array([np.median(c) for c in b])  # This also works
+    #return np.pad(np.std(x[idx],axis=1), pad_width=(0, N-1), mode="edge")
+    return np.pad(np.std(x[idx],axis=1), pad_width=(int(np.floor((N-1)/2)),int(np.ceil((N-1)/2))), mode="edge")
 
     
 def RunningMedian(x,N):
     idx = np.arange(N) + np.arange(len(x)-N+1)[:,None]
-    return np.pad(np.median(x[idx],axis=1), pad_width=(0, N-1), mode="edge")
+    #return np.pad(np.median(x[idx],axis=1), pad_width=(0, N-1), mode="edge")
+    return np.pad(np.median(x[idx],axis=1), pad_width=(int(np.floor((N-1)/2)),int(np.ceil((N-1)/2))), mode="edge")
 
 
 def RunningMean(x,N):
     idx = np.arange(N) + np.arange(len(x)-N+1)[:,None]
-    return np.pad(np.mean(x[idx],axis=1), pad_width=(0, N-1), mode="edge")
+    #return np.pad(np.mean(x[idx],axis=1), pad_width=(0, N-1), mode="edge")
+    return np.pad(np.mean(x[idx],axis=1), pad_width=(int(np.floor((N-1)/2)),int(np.ceil((N-1)/2))), mode="edge")
     
 
 def detect_time_gaps(trace, min_samples=10, epsilon=1e-20, thresh_disc=100):

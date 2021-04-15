@@ -160,6 +160,11 @@ class MatrixProfile:
 
         if not width:
             width = int(0.5 * self.sublen)
+
+        #num_days = round((self.endtime - self.starttime)/(3600*24.))
+        #for nday in num_days:
+        
+        
         lowthresh = np.median(self.mp) + mad_thresh_mult * robust.mad(self.mp)
         peaks, properties = find_peaks(self.mp, height=[lowthresh, 1.0], width=width)  # , prominence=0.3)
 
