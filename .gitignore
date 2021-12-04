@@ -2,10 +2,12 @@
 notebooks
 .idea
 scripts_meager
-scripts_frs
-scripts_frs/matrix_profiles
+scripts_frs/matrix_profiles*
 scripts_frs/outslurm
-scripts_frs/detections
+scripts_frs/detections*
+scripts_frs/figs
+scripts_frs/input_files/*
+scripts_frs/old
 slurm-*
 *.npy
 *.mseed
