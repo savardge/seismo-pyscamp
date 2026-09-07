@@ -23,19 +23,35 @@ def RunningMean(x,N):
     return np.pad(np.mean(x[idx],axis=1), pad_width=(int(np.floor((N-1)/2)),int(np.ceil((N-1)/2))), mode="edge")
     
 
-def detect_time_gaps(trace, min_samples=10, epsilon=1e-20, thresh_disc=100):
+def detect_time_gaps(trace, min_samples=10, epsilon=1e-20, thresh_disc=100, rel_epsilon=1e-3):
     """
-    Detect time gaps where data is filled with zeros for a given Obspy trace.
+    Detect time gaps for a given Obspy trace.
+
+    A gap is min_samples consecutive samples that are "dead". Dead means below
+    an absolute floor (epsilon) OR far below the trace's own noise level
+    (rel_epsilon * MAD): dataloggers signal an outage with a near-zero but
+    non-zero level, which an absolute-only test misses entirely. Such a stretch
+    is catastrophic downstream, because SCAMP z-normalises each window and
+    dividing by a near-zero standard deviation produces |Pearson| >> 1.
+
     :param trace: obspy.core.trace
     :param min_samples: Minimum number of samples for time gap
-    :param epsilon: Machine precision (use to define zero)
+    :param epsilon: Absolute floor below which a sample counts as dead
     :param thresh_disc: Threshold for discontinuity for multiple gaps
+    :param rel_epsilon: Dead threshold as a fraction of the trace MAD. Set
+        falsy to restore the absolute-only behaviour.
     :return: num_gaps, gap_start_ind, gap_end_ind
     """
 
     tdata = trace.data
 
-    indz = np.where(abs(tdata) < epsilon)[0]  # indices where we have 0
+    thresh = epsilon
+    if rel_epsilon:
+        scale = robust.mad(tdata)
+        if scale > 0:
+            thresh = max(epsilon, rel_epsilon * scale)
+
+    indz = np.where(abs(tdata) < thresh)[0]  # indices where the trace is dead
     diff_indz = indz[min_samples:] - indz[
                                      0:-min_samples]  # Need min_samples consecutive samples with 0's to identify as time gap
     ind_des = np.where(diff_indz == min_samples)[0]  # desired indices: value is equal to min_samples in the time gap
@@ -69,15 +85,17 @@ def detect_time_gaps(trace, min_samples=10, epsilon=1e-20, thresh_disc=100):
     return [num_gaps, gap_start_ind, gap_end_ind]
 
 
-def fill_time_gaps_noise(stream, min_samples=10, epsilon=1e-20, thresh_disc=100, ntest=2000, verbose=False):
+def fill_time_gaps_noise(stream, min_samples=10, epsilon=1e-20, thresh_disc=100, ntest=2000, verbose=False,
+                         rel_epsilon=1e-3):
     """
-    Fill time gaps where data is filled with zeros for a given Obspy stream.
+    Fill time gaps with noise for a given Obspy stream.
     :param stream: obspy.core.stream
     :param min_samples: Minimum number of samples for time gap
-    :param epsilon: Machine precision (use to define zero)
+    :param epsilon: Absolute floor below which a sample counts as dead
     :param thresh_disc: Threshold for discontinuity for multiple gaps
     :param ntest: Number of test samples in data - assume they are noise
     :param verbose: Show details
+    :param rel_epsilon: Dead threshold as a fraction of the trace MAD (see detect_time_gaps)
     :return: stream filled with noise for time gaps.
     """
 
@@ -86,7 +104,14 @@ def fill_time_gaps_noise(stream, min_samples=10, epsilon=1e-20, thresh_disc=100,
         dt = trace.stats.delta
 
         # 1) Find time gaps
-        [num_gaps, gap_start_ind, gap_end_ind] = detect_time_gaps(trace, min_samples, epsilon, thresh_disc)
+        [num_gaps, gap_start_ind, gap_end_ind] = detect_time_gaps(trace, min_samples, epsilon, thresh_disc,
+                                                                  rel_epsilon=rel_epsilon)
+
+        # Record what we filled, as absolute times, so downstream steps can
+        # reject "detections" that are really matches between synthetic noise.
+        trace.stats.gaps_filled = [
+            (trace.stats.starttime + gap_start_ind[i] * dt, trace.stats.starttime + gap_end_ind[i] * dt)
+            for i in range(num_gaps)]
 
         if verbose and num_gaps > 0:
             Logger.info('Number of time gaps for %s: %d' % (trace.id, num_gaps))

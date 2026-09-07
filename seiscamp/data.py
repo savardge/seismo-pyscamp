@@ -6,7 +6,7 @@ from seiscamp.util import *
 
 Logger = logging.getLogger(__name__)
 
-DEFAULT_WF_DIR = "/home/gilbert_lab/cami_frs/all_daily_symlinks/"
+DEFAULT_WF_DIR = os.environ.get("SEISCAMP_WF_DIR", "/mnt/cmc3/")
 
 
 def get_filename_root(stats, sublen_samp, out_dir):
@@ -39,11 +39,8 @@ def get_stream_1day(station, channel, starttime, endtime, fs, gain=1e18, wf_dir=
         wf_dir = DEFAULT_WF_DIR
     Logger.info("Getting data stream from directory %s..." % (wf_dir))
     
-    #day = starttime.strftime("%Y%m%d")
-    #path_search = os.path.join(WF_DIR, day, "*.%s*%s*" % (station, channel))
-    day = starttime.strftime("%j")
-    year = starttime.strftime("%Y")
-    path_search = os.path.join(wf_dir, year, day, "*.%s..%s*" % (station, channel))
+    day = starttime.strftime("%Y%m%d")
+    path_search = os.path.join(wf_dir, day, "*.%s..%s*" % (station, channel))
     
     file_list = glob(path_search)
     st = Stream()
@@ -86,11 +83,8 @@ def get_stream_days(station, channel, first_day, num_days, fs, gain=1e18, wf_dir
     
     st = Stream()
     for day in days:
-        #daystr = day.strftime("%Y%m%d")
-        #path_search = os.path.join(WF_DIR, daystr, "*.%s*%s*" % (station, channel))
-        daystr = day.strftime("%j")
-        year = day.strftime("%Y")
-        path_search = os.path.join(wf_dir, year, daystr, "*.%s..%s*" % (station, channel))
+        daystr = day.strftime("%Y%m%d")
+        path_search = os.path.join(wf_dir, daystr, "*.%s..%s*" % (station, channel))
 
         Logger.info("Looking for data for day %s" % daystr)
         file_list = glob(path_search)

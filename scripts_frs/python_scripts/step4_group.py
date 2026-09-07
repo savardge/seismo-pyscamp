@@ -13,12 +13,14 @@ from networkx.algorithms.components import *
 import matplotlib.pyplot as plt
 import sys
 
-input_dir = os.path.split(sys.argv[1])[0] #"/home/genevieve.savard/seismo-pyscamp/scripts_frs/detections_combined/"
+input_dir = os.path.split(sys.argv[1])[0]
 input_csv = os.path.split(sys.argv[1])[1]
-wf_dir = "/home/gilbert_lab/cami_frs/all_daily_symlinks"
-doplot = False
+wf_dir = os.environ.get("SEISCAMP_WF_DIR", "/mnt/cmc3")
+doplot = True
 dowrite = True
-output_dir = "/home/genevieve.savard/seismo-pyscamp/scripts_frs/detections_times/"
+output_dir = os.environ.get(
+    "SEISCAMP_DET_TIMES",
+    os.path.expanduser("~/seismo-pyscamp/scripts_frs/detections_times"))
 output_file = input_csv.replace("detections.csv", "times.csv")
 sta = input_csv.split("_")[2]
 print(f"Station {sta}\ninput CSV: {input_csv}\nInput dir: {input_dir}\nOutput files: {output_file}\nOutput dir: {output_dir} ")
@@ -136,15 +138,17 @@ def extract(input_csv):
 
 
 def plot_3comps(stream, savefile=None):
-    nrows = np.min([len(stream.select(channel="*Z")), 100])
-    stn = stream.select(channel="*X").sort(keys=['starttime'])
-    ste = stream.select(channel="*Y").sort(keys=["starttime"])
+    stn = stream.select(channel="*N").sort(keys=['starttime'])
+    ste = stream.select(channel="*E").sort(keys=["starttime"])
     stz = stream.select(channel="*Z").sort(keys=["starttime"])
-    fig, axs = plt.subplots(nrows, 3, figsize=(16, 5*nrows))
+    nrows = np.min([len(stn), len(ste), len(stz), 20])
+    if nrows == 0:
+        return
+    fig, axs = plt.subplots(nrows, 3, figsize=(16, 5*nrows), squeeze=False)
     for k in range(nrows):
-        axs[k][0].plot_date(stn[k].times("matplotlib"), stn[k].data, "k")
-        axs[k][1].plot_date(ste[k].times("matplotlib"), ste[k].data, "k")
-        axs[k][2].plot_date(stz[k].times("matplotlib"), stz[k].data, "k")
+        axs[k][0].plot(stn[k].times("matplotlib"), stn[k].data, "k")
+        axs[k][1].plot(ste[k].times("matplotlib"), ste[k].data, "k")
+        axs[k][2].plot(stz[k].times("matplotlib"), stz[k].data, "k")
         axs[k][1].set_title(stn[k].stats.starttime)
     fig.autofmt_xdate()
     if savefile:
@@ -173,20 +177,21 @@ for i, group in enumerate(sorted(groups, key=len, reverse=True)):
         t1 = dfref.loc[dfref.window_id == node].tlb.values[0] - 4
         t2 = dfref.loc[dfref.window_id == node].tub.values[0] + 4
         #print(f"{t1}, {t2}, {t2-t1}")
-        tmp = read(os.path.join(wf_dir, t1.strftime("%Y/%j"), "*%s*Z*" % sta), starttime=t1, endtime=t2)[0]
+        tmp = read(os.path.join(wf_dir, t1.strftime("%Y%m%d"), "*%s*Z*" % sta), starttime=t1, endtime=t2)[0]
         tmp.detrend()
         tmp.filter("highpass", freq=2)
         tmp.filter("lowpass", freq=10)
         #tmp.plot()
         trace_list.append(tmp)
         node_list.append(node)
-    shifts, ccs = align_traces(trace_list, shift_len=int(4.*100), master=False, positive=False, plot=False)
+    # shift_len is in samples: allow +/- 4 s at the raw files' actual sampling rate
+    shifts, ccs = align_traces(trace_list, shift_len=int(4. * trace_list[0].stats.sampling_rate), master=False, positive=False, plot=False)
 
     stream = Stream()
     for node, shift in zip(node_list, shifts):
         t1 = dfref.loc[dfref.window_id == node].tlb.values[0] - shift
         t2 = t1 + 6
-        tmp = read(os.path.join(wf_dir, t1.strftime("%Y/%j"), "*%s*" % sta), starttime=t1, endtime=t2)
+        tmp = read(os.path.join(wf_dir, t1.strftime("%Y%m%d"), "*%s*" % sta), starttime=t1, endtime=t2)
         tmp.detrend()
         tmp.filter("highpass", freq=2)
 #        tmp.filter("lowpass", freq=10)
@@ -194,10 +199,11 @@ for i, group in enumerate(sorted(groups, key=len, reverse=True)):
         stream += tmp
 
         if dowrite:
-            nsta = len(glob(os.path.join(wf_dir, t1.strftime("%Y/%j"), "*Z*")))
+            nsta = len(glob(os.path.join(wf_dir, t1.strftime("%Y%m%d"), "*Z*")))
             maxamp = np.max(np.abs(tmp.max()))
             print("Adding a line to file")
-            fout.write("%s,%.0f,%d,%d\n" % (t1.strftime("%Y-%m-%dT%H:%M:%S.%f"),maxamp,nsta,i))
+            # %.0f rounded these m/s amplitudes (~1e-9) to a column of zeros
+            fout.write("%s,%.6g,%d,%d\n" % (t1.strftime("%Y-%m-%dT%H:%M:%S.%f"),maxamp,nsta,i))
 
     if doplot:
         num_nodes = len(node_list)

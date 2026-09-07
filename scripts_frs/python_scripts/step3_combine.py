@@ -3,8 +3,12 @@ import os
 import pandas as pd
 import sys
 
-input_dir = "/home/genevieve.savard/seismo-pyscamp/scripts_frs/detections_single"
-output_dir = "/home/genevieve.savard/seismo-pyscamp/scripts_frs/detections_combined"
+input_dir = os.environ.get(
+    "SEISCAMP_DET_SINGLE",
+    os.path.expanduser("~/seismo-pyscamp/scripts_frs/detections_single"))
+output_dir = os.environ.get(
+    "SEISCAMP_DET_COMBINED",
+    os.path.expanduser("~/seismo-pyscamp/scripts_frs/detections_combined"))
 
 prefix = sys.argv[1] #"20201005000000.000000_20201005235959.996000_BH012_"
 chan2 = sys.argv[3] #"HH"

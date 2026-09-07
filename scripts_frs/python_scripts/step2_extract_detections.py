@@ -20,8 +20,13 @@ procs = time.time()
 # INPUT
 doplot=False
 fname_mp = sys.argv[1]
-input_dir = "/home/genevieve.savard/seismo-pyscamp/scripts_frs/matrix_profiles/"
-fname_out = os.path.join(input_dir, fname_mp.replace("_mp.npy", "_detections.csv"))
+input_dir = os.environ.get(
+    "SEISCAMP_OUT",
+    os.path.expanduser("~/seismo-pyscamp/scripts_frs/matrix_profiles"))
+det_dir = os.environ.get(
+    "SEISCAMP_DET_SINGLE",
+    os.path.expanduser("~/seismo-pyscamp/scripts_frs/detections_single"))
+fname_out = os.path.join(det_dir, fname_mp.replace("_mp.npy", "_detections.csv"))
 Logger.info(f"Input filename {fname_mp}\nInput directory: {input_dir}")
 Logger.info(f"Output filename {fname_out}")
 
@@ -50,11 +55,26 @@ Logger.info("sublen_samp = %d" % sublen_samp)
 Logger.info("Length of MP: %d samples" % mp.shape[0])
 
 # GET DATA
-wf_dir = "/home/gilbert_lab/cami_frs/all_daily_symlinks"
+wf_dir = os.environ.get("SEISCAMP_WF_DIR", "/mnt/cmc3")
 trace1 = get_stream_days(station=station, channel=channel, first_day=starttime, num_days=num_days, fs=fs, gain=1, wf_dir=wf_dir)
+gaps_filled = list(getattr(trace1.stats, "gaps_filled", []))
 trace1.trim(starttime=starttime, endtime=endtime, pad=True, fill_value=0)
 Logger.info(trace1)
 tvec = trace1.times("matplotlib")
+
+# Windows that were dead in the raw data carry no signal: any match there is
+# between synthetic fill (or, on profiles built before the gap detector was
+# fixed, between near-constant samples that z-normalise to garbage). Reject
+# peaks landing in one, padded by the SCAMP window length.
+gap_pad = sublen_samp / fs
+if gaps_filled:
+    Logger.info("Rejecting detections inside %d filled gap(s):" % len(gaps_filled))
+    for g0, g1 in gaps_filled:
+        Logger.info("\t%s - %s (%.1f s)" % (g0, g1, g1 - g0))
+
+
+def in_gap(t):
+    return any(g0 - gap_pad <= t <= g1 + gap_pad for g0, g1 in gaps_filled)
 
 mpObj = MatrixProfile(mp=mp, ind=ind, trace=trace1, sublen=sublen_samp)
 
@@ -70,6 +90,7 @@ postpad = 10
 nsplit = 12. # Split days into chunks
 
 # Initialize lists
+n_gap_rejected = 0
 time1 = []
 time2 = []
 mpval = []
@@ -93,8 +114,15 @@ for nday in range(int(num_days * nsplit)):
     i1 = np.argmax(tvec>=t1)
     i2 = np.argmax(tvec>=t2)
 
-    if i2 == 0:
-        print("Data does not extend to window's end. Stopping.")
+    # argmax returns 0 when no sample satisfies the condition. For the final
+    # chunk t2 is midnight of the next day while the trace stops one sample
+    # short, so take the window out to the end of the data instead of dropping
+    # it (this silently discarded the last 1/nsplit of every day).
+    if i2 == 0 and tvec[-1] >= t1:
+        i2 = len(tvec)
+
+    if i2 <= i1:
+        print("Window contains no data. Skipping.")
         continue
     
     # CUT
@@ -136,6 +164,10 @@ for nday in range(int(num_days * nsplit)):
         tpk2 = UTCDateTime(mdates.num2date(tvec[ind_min]))
 #        print(f"tpk2 = {tpk2}")
 
+        if in_gap(tpk) or in_gap(tpk2):
+            n_gap_rejected += 1
+            continue
+
         # Get stack for more precise times of peak       
         data1 = trace1.slice(starttime=tpk - prepad, endtime=tpk + postpad).copy().normalize().trim(starttime=tpk - prepad, endtime=tpk + postpad, pad=True, fill_value=0)
         data2 = trace1.slice(starttime=tpk2 - prepad, endtime=tpk2 + postpad).copy().normalize().trim(starttime=tpk2 - prepad, endtime=tpk2 + postpad, pad=True, fill_value=0)
@@ -154,6 +186,7 @@ for nday in range(int(num_days * nsplit)):
     Logger.info(f"# of peaks after scanning window {nday}: {len(time1)}")
     
 # Now build dataframe
+Logger.info("Rejected %d peak(s) inside filled gaps" % n_gap_rejected)
 Logger.info("Now saving detections to dataframe")
 tutc1 = [UTCDateTime(mdates.num2date(t)).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-4] for t in time1]
 tutc2 = [UTCDateTime(mdates.num2date(t)).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-4] for t in time2]
