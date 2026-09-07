@@ -1,0 +1,32 @@
+name: seismo-pyscamp
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - cmake
+  - cxx-compiler
+  # core seiscamp package
+  - numpy
+  - scipy
+  - pandas
+  - matplotlib
+  - statsmodels
+  - obspy
+  # scripts_frs / scripts_meager
+  - networkx
+  - eqcorrscan
+  # notebooks / interactive use
+  - jupyterlab
+  - ipykernel
+  # picking/ (legacy PhasePApy workflow). PhasePApy itself has no setup.py --
+  # clone https://github.com/austinholland/PhasePApy and add it to PYTHONPATH.
+  - basemap
+  - sqlalchemy<2
+  # pinned: conda-forge h5py 3.16 is built against hdf5 2.1, and eqcorrscan
+  # otherwise pulls hdf5 2.2 and warns on every import
+  - hdf5=2.1
+  - pip:
+      # latest pyscamp built from source (CPU backend on macOS; CUDA only on Linux/Windows)
+      - git+https://github.com/zpzim/SCAMP.git
+      - -e .
