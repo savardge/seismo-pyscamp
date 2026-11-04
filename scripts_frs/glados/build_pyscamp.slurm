@@ -42,7 +42,11 @@ else
     echo "creating conda env $ENV_NAME from environment-glados.yml"
     conda env create -f "$REPO/environment-glados.yml"
 fi
+# conda's compiler activation scripts read variables that may be unset, so
+# the unbound-variable check is lifted around the activation only.
+set +u
 conda activate "$ENV_NAME"
+set -u
 # gxx_linux-64 exports CC/CXX to the conda gcc 12 on activation; point nvcc at it.
 export CUDAHOSTCXX="$CXX"
 export CUDACXX="$CONDA_PREFIX/bin/nvcc"
