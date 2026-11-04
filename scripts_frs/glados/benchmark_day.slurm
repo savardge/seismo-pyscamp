@@ -36,7 +36,9 @@ nvidia-smi --query-gpu=name,memory.total --format=csv
 
 module purge   # CUDA runtime comes from the conda env, not a module
 source "$HOME/miniconda3/etc/profile.d/conda.sh"
+set +u   # conda's activation hooks read unset variables; re-enabled right after
 conda activate seismo-pyscamp
+set -u
 python -c "import pyscamp; assert pyscamp.gpu_supported(), 'no CUDA in pyscamp'; print('pyscamp GPU OK')" || exit 1
 
 # Pipeline I/O: archive is the Glados year/julian-day tree (data.py handles the
