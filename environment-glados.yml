@@ -1,10 +1,12 @@
 # Conda environment for running the scripts_frs pipeline on the Glados cluster
-# (glados.ucalgary.ca). Lean counterpart of environment.yml: no notebook or
-# picking/ extras, and no conda compilers -- CUDA 11.2's nvcc only accepts host
-# gcc <= 10, so pyscamp is compiled with the cluster's own gcc module instead
-# (see scripts_frs/glados/build_pyscamp.slurm, which also installs pyscamp;
-# it is deliberately absent from the pip list below so that a plain
-# `conda env create` never produces a CPU-only build by accident).
+# (glados.ucalgary.ca). Lean counterpart of environment.yml (no notebook or
+# picking/ extras) that carries its own CUDA toolchain: the newest CUDA module
+# on Glados is 11.2, whose CUB library predates the DeviceMergeSort API that
+# SCAMP's GPU kernels use. conda-forge's CUDA 12.0 is the newest version the
+# nodes' 525-series driver runs natively, and nvcc 12.0 accepts gcc 12 as host
+# compiler. pyscamp itself is built by scripts_frs/glados/build_pyscamp.slurm;
+# it is deliberately absent from the pip list so that a plain `conda env create`
+# never produces a CPU-only build by accident.
 name: seismo-pyscamp
 channels:
   - conda-forge
@@ -13,6 +15,15 @@ dependencies:
   - pip
   - cmake>=3.18          # SCAMP's build needs >= 3.18; the module system only has 3.10
   - git
+  # CUDA 12.0 build + runtime toolchain (see header). cuda-version pins every
+  # cuda-* / libcufft package to the 12.0 release.
+  - cuda-version=12.0
+  - cuda-nvcc
+  - cuda-cudart-dev
+  - cuda-driver-dev      # libcuda stub to link against (the real one is the driver)
+  - cuda-cccl            # CUB / Thrust / libcu++ headers
+  - libcufft-dev
+  - gxx_linux-64=12      # host compiler for nvcc 12.0 (accepts gcc <= 12)
   # core seiscamp package
   - numpy
   - scipy

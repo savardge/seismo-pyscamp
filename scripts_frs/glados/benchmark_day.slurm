@@ -34,8 +34,7 @@ RUN="${SEISCAMP_RUN_DIR:-$HOME/scamp_runs/bench_${DAY}_${FS}Hz_${SLURM_JOB_ID}}"
 echo "=== $(date) on $(hostname) | day $DAY | fs $FS Hz | win $SUBLEN s | run dir $RUN ==="
 nvidia-smi --query-gpu=name,memory.total --format=csv
 
-module purge
-module load cuda/11.2
+module purge   # CUDA runtime comes from the conda env, not a module
 source "$HOME/miniconda3/etc/profile.d/conda.sh"
 conda activate seismo-pyscamp
 python -c "import pyscamp; assert pyscamp.gpu_supported(), 'no CUDA in pyscamp'; print('pyscamp GPU OK')" || exit 1
