@@ -9,7 +9,7 @@ pipeline itself is unchanged; these only set up the environment and drive
    cd ~/seismo-pyscamp/scripts_frs/glados && mkdir -p logs && sbatch build_pyscamp.slurm
    ```
    Creates the `seismo-pyscamp` env from `environment-glados.yml` and compiles
-   pyscamp with conda-forge's CUDA 12.0 for compute capability 6.1 only. The log ends with a
+   pyscamp with conda-forge's CUDA 12.6 for compute capability 6.1 only. The log ends with a
    GPU self-join test; `gpu_supported: True` is the thing to check.
 2. Benchmark one day end to end:
    ```bash

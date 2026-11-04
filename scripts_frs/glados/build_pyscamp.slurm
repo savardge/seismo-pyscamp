@@ -8,7 +8,7 @@
 #SBATCH --output=logs/%x-%j.out
 #
 # Create or update the `seismo-pyscamp` conda environment on Glados (with its
-# CUDA 12.0 toolchain) and build pyscamp from GitHub HEAD *with* the CUDA
+# CUDA 12.6 toolchain) and build pyscamp from GitHub HEAD *with* the CUDA
 # backend, then verify
 # that pyscamp actually sees the GPU. Runs on a GPU node, not the login node:
 # the compile is heavy and the verification needs a card.
@@ -28,13 +28,13 @@ SCAMP_REF="${SCAMP_REF:-master}"
 echo "=== $(date) on $(hostname) | repo $REPO | env $ENV_NAME ==="
 nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv
 
-# --- conda environment (includes the CUDA 12.0 toolchain) --------------------
+# --- conda environment (includes the CUDA 12.6 toolchain) --------------------
 # CONDA_OVERRIDE_CUDA tells the solver which CUDA the driver supports in case
 # it cannot detect it; `conda env update` also upgrades an env created from an
 # earlier version of the file.
 module purge
 source "$HOME/miniconda3/etc/profile.d/conda.sh"
-export CONDA_OVERRIDE_CUDA=12.0
+export CONDA_OVERRIDE_CUDA=12.6
 if conda env list | awk '{print $1}' | grep -qx "$ENV_NAME"; then
     echo "conda env $ENV_NAME exists, updating it from environment-glados.yml"
     conda env update -n "$ENV_NAME" -f "$REPO/environment-glados.yml"
@@ -47,7 +47,7 @@ fi
 set +u
 conda activate "$ENV_NAME"
 set -u
-# gxx_linux-64 exports CC/CXX to the conda gcc 12 on activation; point nvcc at it.
+# gxx_linux-64 exports CC/CXX to the conda gcc 13 on activation; point nvcc at it.
 export CUDAHOSTCXX="$CXX"
 export CUDACXX="$CONDA_PREFIX/bin/nvcc"
 echo "python: $(which python) ($(python --version))"
