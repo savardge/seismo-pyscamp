@@ -9,6 +9,39 @@ Logger = logging.getLogger(__name__)
 DEFAULT_WF_DIR = os.environ.get("SEISCAMP_WF_DIR", "/mnt/cmc3/")
 
 
+def day_directory(wf_dir, day):
+    """
+    Return the directory holding one day of daily waveform files.
+
+    Two archive layouts are supported, because the same pipeline runs on two
+    machines whose archives are organised differently:
+
+    * ``{wf_dir}/YYYYMMDD/`` -- flat day folders (the ``/mnt/cmc3`` mirror on
+      work-lumidas-1);
+    * ``{wf_dir}/YYYY/DDD/`` -- year / julian-day tree (the
+      ``/home/gilbert_lab/cami_frs/all_daily_symlinks`` archive on Glados).
+
+    The flat layout is tried first; if that folder does not exist the
+    year/julian-day path is returned (whether or not it exists, so the
+    caller's "no data found" message still names a sensible path).
+
+    :type wf_dir: str
+    :param wf_dir: Root of the waveform archive.
+    :type day: :class:`~obspy.core.utcdatetime.UTCDateTime`
+    :param day: Any time within the requested day (UTC).
+    :rtype: str
+    :return: Path of the day's directory.
+
+    >>> from obspy import UTCDateTime
+    >>> day_directory("/archive", UTCDateTime("2022-07-19"))  # no flat folder
+    '/archive/2022/200'
+    """
+    flat = os.path.join(wf_dir, day.strftime("%Y%m%d"))
+    if os.path.isdir(flat):
+        return flat
+    return os.path.join(wf_dir, day.strftime("%Y"), day.strftime("%j"))
+
+
 def get_filename_root(stats, sublen_samp, out_dir):
     # times
     trace_start = stats.starttime
@@ -40,7 +73,8 @@ def get_stream_1day(station, channel, starttime, endtime, fs, gain=1e18, wf_dir=
     Logger.info("Getting data stream from directory %s..." % (wf_dir))
     
     day = starttime.strftime("%Y%m%d")
-    path_search = os.path.join(wf_dir, day, "*.%s..%s*" % (station, channel))
+    path_search = os.path.join(day_directory(wf_dir, starttime),
+                               "*.%s..%s*" % (station, channel))
     
     file_list = glob(path_search)
     st = Stream()
@@ -84,7 +118,8 @@ def get_stream_days(station, channel, first_day, num_days, fs, gain=1e18, wf_dir
     st = Stream()
     for day in days:
         daystr = day.strftime("%Y%m%d")
-        path_search = os.path.join(wf_dir, daystr, "*.%s..%s*" % (station, channel))
+        path_search = os.path.join(day_directory(wf_dir, day),
+                                   "*.%s..%s*" % (station, channel))
 
         Logger.info("Looking for data for day %s" % daystr)
         file_list = glob(path_search)

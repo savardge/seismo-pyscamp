@@ -16,7 +16,7 @@ import sys
 input_dir = os.path.split(sys.argv[1])[0]
 input_csv = os.path.split(sys.argv[1])[1]
 wf_dir = os.environ.get("SEISCAMP_WF_DIR", "/mnt/cmc3")
-doplot = True
+doplot = os.environ.get("SEISCAMP_PLOT", "") not in ("", "0", "false")
 dowrite = True
 output_dir = os.environ.get(
     "SEISCAMP_DET_TIMES",

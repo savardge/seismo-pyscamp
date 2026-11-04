@@ -21,7 +21,7 @@ MP_DIR="${SEISCAMP_OUT:-$HOME/seismo-pyscamp/scripts_frs/matrix_profiles}"
 DET_SINGLE="${SEISCAMP_DET_SINGLE:-$HOME/seismo-pyscamp/scripts_frs/detections_single}"
 DET_COMBINED="${SEISCAMP_DET_COMBINED:-$HOME/seismo-pyscamp/scripts_frs/detections_combined}"
 DET_TIMES="${SEISCAMP_DET_TIMES:-$HOME/seismo-pyscamp/scripts_frs/detections_times}"
-LOG_DIR="$SCRIPT_DIR/logs"
+LOG_DIR="${SEISCAMP_LOG_DIR:-$SCRIPT_DIR/logs}"
 mkdir -p "$MP_DIR" "$DET_SINGLE" "$DET_COMBINED" "$DET_TIMES" "$LOG_DIR"
 
 echo "=== Day $DAY | sublen ${SUBLEN}s | fs ${FS}Hz | stations: ${STATIONS[*]} ==="
@@ -40,13 +40,26 @@ for STA in "${STATIONS[@]}"; do
 done
 
 # ---- Step 2: extract detections per trace ----
+# The matrix profile + match indices of one trace-day are ~140 MB at 100 Hz
+# (~350 MB at 250 Hz) and are only an intermediate: once step2 has turned them
+# into a detections CSV they are deleted, unless SEISCAMP_KEEP_MP=1 (e.g. to
+# re-run step2 with other thresholds). A full-archive scan would otherwise
+# leave several TB and hundreds of thousands of files behind.
+KEEP_MP="${SEISCAMP_KEEP_MP:-0}"
 for MPFILE in "$MP_DIR"/${DAY}*_mp.npy; do
     [ -e "$MPFILE" ] || continue
     BASE=$(basename "$MPFILE")
     LOG="$LOG_DIR/step2_${BASE%.npy}.log"
     echo "[step2] $BASE (log: $LOG)"
-    python "$PYDIR/step2_extract_detections.py" "$BASE" > "$LOG" 2>&1 \
-        || { echo "[step2] FAILED for $BASE, see $LOG"; continue; }
+    SECONDS=0
+    if python "$PYDIR/step2_extract_detections.py" "$BASE" > "$LOG" 2>&1; then
+        echo "[step2] $BASE done in ${SECONDS}s"
+        if [ "$KEEP_MP" != "1" ]; then
+            rm -f "$MPFILE" "${MPFILE%_mp.npy}_ind.npy"
+        fi
+    else
+        echo "[step2] FAILED for $BASE, see $LOG"
+    fi
 done
 
 # ---- Step 3: combine N/E/Z per station ----

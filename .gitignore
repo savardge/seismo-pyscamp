@@ -16,3 +16,5 @@ slurm-*
 .DS_Store
 *.pyc
 __pycache__
+scripts_frs/glados/logs
+scripts_frs/logs
