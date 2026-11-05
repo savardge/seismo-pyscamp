@@ -1,4 +1,7 @@
 from obspy import Stream, read
+# day_directory() resolves either archive layout (YYYYMMDD/ or YYYY/DDD/),
+# so this script finds waveforms on both work-lumidas-1 and Glados.
+from seiscamp.data import day_directory
 import os
 import matplotlib.dates as mdates
 from eqcorrscan.utils.stacking import align_traces
@@ -177,7 +180,7 @@ for i, group in enumerate(sorted(groups, key=len, reverse=True)):
         t1 = dfref.loc[dfref.window_id == node].tlb.values[0] - 4
         t2 = dfref.loc[dfref.window_id == node].tub.values[0] + 4
         #print(f"{t1}, {t2}, {t2-t1}")
-        tmp = read(os.path.join(wf_dir, t1.strftime("%Y%m%d"), "*%s*Z*" % sta), starttime=t1, endtime=t2)[0]
+        tmp = read(os.path.join(day_directory(wf_dir, t1), "*%s*Z*" % sta), starttime=t1, endtime=t2)[0]
         tmp.detrend()
         tmp.filter("highpass", freq=2)
         tmp.filter("lowpass", freq=10)
@@ -191,7 +194,7 @@ for i, group in enumerate(sorted(groups, key=len, reverse=True)):
     for node, shift in zip(node_list, shifts):
         t1 = dfref.loc[dfref.window_id == node].tlb.values[0] - shift
         t2 = t1 + 6
-        tmp = read(os.path.join(wf_dir, t1.strftime("%Y%m%d"), "*%s*" % sta), starttime=t1, endtime=t2)
+        tmp = read(os.path.join(day_directory(wf_dir, t1), "*%s*" % sta), starttime=t1, endtime=t2)
         tmp.detrend()
         tmp.filter("highpass", freq=2)
 #        tmp.filter("lowpass", freq=10)
@@ -199,7 +202,7 @@ for i, group in enumerate(sorted(groups, key=len, reverse=True)):
         stream += tmp
 
         if dowrite:
-            nsta = len(glob(os.path.join(wf_dir, t1.strftime("%Y%m%d"), "*Z*")))
+            nsta = len(glob(os.path.join(day_directory(wf_dir, t1), "*Z*")))
             maxamp = np.max(np.abs(tmp.max()))
             print("Adding a line to file")
             # %.0f rounded these m/s amplitudes (~1e-9) to a column of zeros
