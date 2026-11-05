@@ -140,6 +140,73 @@ def extract(input_csv):
     return df, dfref, groups
 
 
+# ---------------------------------------------------------------------------
+# Waveform access: read each station-day ONCE, slice windows in memory.
+#
+# The original loop called obspy.read(file, starttime, endtime) twice per
+# detection. ObsPy's SAC reader has to read the whole daily file (172 MB at
+# 500 Hz) before trimming, so a station with 20,000 detections re-read
+# ~7 TB over NFS and step 4 took hours. The caches below hold the raw,
+# unfiltered day Stream (all components) and the per-day station count;
+# each window is a copy of a slice, so the in-place detrend/filter never
+# touches the cached data. Day boundaries behave as before: a window is cut
+# from the day that contains its start time only.
+# ---------------------------------------------------------------------------
+_day_stream_cache = {}   # "YYYYMMDD" -> raw obspy Stream of this station's files
+_day_nsta_cache = {}     # "YYYYMMDD" -> number of stations with a Z file that day
+
+
+def get_day_stream(t):
+    """
+    Return the raw (unfiltered) Stream of all components of station ``sta``
+    for the day containing time ``t``, reading the daily files only once.
+
+    :type t: :class:`~obspy.core.utcdatetime.UTCDateTime`
+    :param t: Any time within the wanted day (UTC).
+    :rtype: :class:`~obspy.core.stream.Stream`
+    """
+    key = t.strftime("%Y%m%d")
+    if key not in _day_stream_cache:
+        pattern = os.path.join(day_directory(wf_dir, t), "*%s*" % sta)
+        print(f"Reading day {key} for {sta} once: {pattern}")
+        _day_stream_cache[key] = read(pattern)
+    return _day_stream_cache[key]
+
+
+def get_window(t1, t2, channel="*"):
+    """
+    Cut a window [t1, t2] of station ``sta`` out of the cached day Stream.
+
+    Returns an independent copy, so callers may detrend/filter in place.
+    ``nearest_sample=True`` matches what ``read(..., starttime, endtime)``
+    did in the original code.
+
+    :type t1: :class:`~obspy.core.utcdatetime.UTCDateTime`
+    :param t1: Window start (UTC).
+    :type t2: :class:`~obspy.core.utcdatetime.UTCDateTime`
+    :param t2: Window end (UTC).
+    :type channel: str
+    :param channel: ObsPy channel glob, e.g. ``"*Z"`` for vertical only.
+    :rtype: :class:`~obspy.core.stream.Stream`
+    """
+    st = get_day_stream(t1).select(channel=channel)
+    return st.slice(t1, t2, nearest_sample=True).copy()
+
+
+def stations_available(t):
+    """
+    Number of stations with a vertical-component file on the day of ``t``
+    (counted once per day and cached).
+
+    :type t: :class:`~obspy.core.utcdatetime.UTCDateTime`
+    :rtype: int
+    """
+    key = t.strftime("%Y%m%d")
+    if key not in _day_nsta_cache:
+        _day_nsta_cache[key] = len(glob(os.path.join(day_directory(wf_dir, t), "*Z*")))
+    return _day_nsta_cache[key]
+
+
 def plot_3comps(stream, savefile=None):
     stn = stream.select(channel="*N").sort(keys=['starttime'])
     ste = stream.select(channel="*E").sort(keys=["starttime"])
@@ -180,7 +247,8 @@ for i, group in enumerate(sorted(groups, key=len, reverse=True)):
         t1 = dfref.loc[dfref.window_id == node].tlb.values[0] - 4
         t2 = dfref.loc[dfref.window_id == node].tub.values[0] + 4
         #print(f"{t1}, {t2}, {t2-t1}")
-        tmp = read(os.path.join(day_directory(wf_dir, t1), "*%s*Z*" % sta), starttime=t1, endtime=t2)[0]
+        # vertical component, +/- 4 s padding, for the alignment step
+        tmp = get_window(t1, t2, channel="*Z")[0]
         tmp.detrend()
         tmp.filter("highpass", freq=2)
         tmp.filter("lowpass", freq=10)
@@ -194,7 +262,8 @@ for i, group in enumerate(sorted(groups, key=len, reverse=True)):
     for node, shift in zip(node_list, shifts):
         t1 = dfref.loc[dfref.window_id == node].tlb.values[0] - shift
         t2 = t1 + 6
-        tmp = read(os.path.join(day_directory(wf_dir, t1), "*%s*" % sta), starttime=t1, endtime=t2)
+        # all components of the aligned 6 s window
+        tmp = get_window(t1, t2)
         tmp.detrend()
         tmp.filter("highpass", freq=2)
 #        tmp.filter("lowpass", freq=10)
@@ -202,11 +271,12 @@ for i, group in enumerate(sorted(groups, key=len, reverse=True)):
         stream += tmp
 
         if dowrite:
-            nsta = len(glob(os.path.join(day_directory(wf_dir, t1), "*Z*")))
+            nsta = stations_available(t1)
             maxamp = np.max(np.abs(tmp.max()))
-            print("Adding a line to file")
             # %.0f rounded these m/s amplitudes (~1e-9) to a column of zeros
             fout.write("%s,%.6g,%d,%d\n" % (t1.strftime("%Y-%m-%dT%H:%M:%S.%f"),maxamp,nsta,i))
+
+    print(f"Group {i}: wrote {len(node_list)} members")
 
     if doplot:
         num_nodes = len(node_list)
