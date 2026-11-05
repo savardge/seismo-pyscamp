@@ -6,5 +6,5 @@ setuptools.setup(
     author="Genevieve Savard",
     author_email="genevieve.savard@ucalgary.ca",
     description="Scripts for using the matrix profile algorithm SCAMP for earthquake similarity search.",
-    packages=["seiscamp"],
+    packages=setuptools.find_packages(include=["seiscamp", "seiscamp.*"]),
 )
