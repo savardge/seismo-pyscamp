@@ -31,6 +31,14 @@ for STA in "${STATIONS[@]}"; do
     for COMP in N E Z; do
         CHAN="${CHANPRE}${COMP}"
         LOG="$LOG_DIR/step1_${DAY}_${STA}_${CHAN}.log"
+        # Resume support: step1 itself skips when its matrix profile exists,
+        # but the profile is deleted after step2. If this trace already has a
+        # detections CSV, steps 1-2 are done for it; skip the GPU work so a
+        # requeued day only recomputes the traces that were not finished.
+        if ls "$DET_SINGLE"/${DAY}*_${STA}_${CHAN}_*_detections.csv >/dev/null 2>&1; then
+            echo "[step1] $STA $CHAN already has detections, skipping"
+            continue
+        fi
         echo "[step1] $STA $CHAN (log: $LOG)"
         SECONDS=0
         python "$PYDIR/step1_pyscamp_1chan.py" "$STA" "$DAY" "$NUMDAYS" "$SUBLEN" "$CHAN" "$FS" > "$LOG" 2>&1 \
